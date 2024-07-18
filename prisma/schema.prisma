@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "go run github.com/steebchen/prisma-client-go"
+}
+
+enum SUB_STATUS {
+  INIT
+  PAID
+  EXPIRED
+  PAUSED
+  CANCELLED
+}
+
+model user {
+  id    Int     @id @default(autoincrement())
+  avatar String @default("")
+  email String @unique
+  password String
+  register_time DateTime @default(dbgenerated("now()"))
+}
+
+model subscriptions {
+  id    Int     @id @default(autoincrement())
+  uid Int
+  store_id Int
+  product_id Int
+  variant_id Int
+  subscription_id Int @unique
+  status SUB_STATUS @default(INIT)
+  created_time DateTime @default(dbgenerated("now()"))
+  updated_time DateTime @updatedAt
+}
