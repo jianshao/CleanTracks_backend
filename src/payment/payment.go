@@ -38,13 +38,15 @@ var (
 )
 
 func subCreated(sub *lemonsqueezy.WebhookRequestSubscription) {
-	if reflect.TypeOf(sub.Meta.CustomData["uid"]).Kind() != reflect.Int {
-		logs.WriteLog(logrus.ErrorLevel, nil, "no uid")
+	uid := 0
+	if reflect.TypeOf(sub.Meta.CustomData["uid"]).Kind() == reflect.Int {
+		// logs.WriteLog(logrus.ErrorLevel, nil, "no uid")
+		uid = sub.Meta.CustomData["uid"].(int)
 	}
 
 	client := utils.GetPrismaClient()
 	_, err := client.Subscriptions.CreateOne(
-		db.Subscriptions.UID.Set(sub.Meta.CustomData["uid"].(int)),
+		db.Subscriptions.UID.Set(uid),
 		db.Subscriptions.StoreID.Set(sub.Data.Attributes.StoreID),
 		db.Subscriptions.ProductID.Set(sub.Data.Attributes.ProductID),
 		db.Subscriptions.VariantID.Set(sub.Data.Attributes.VariantID),
@@ -91,7 +93,13 @@ func subResumed(sub *lemonsqueezy.WebhookRequestSubscription) {
 func subPaid(sub *lemonsqueezy.WebhookRequestSubscriptionInvoice) {
 	client := utils.GetPrismaClient()
 	sid := sub.Data.Attributes.SubscriptionID
-	_, err := client.Subscriptions.FindUnique(db.Subscriptions.SubscriptionID.Equals(sid)).Update(
+	_, err := client.Subscriptions.FindUnique(db.Subscriptions.SubscriptionID.Equals(sid)).Exec(context.Background())
+	if err != nil {
+		logs.WriteLog(logrus.ErrorLevel, nil, err.Error())
+		return
+	}
+
+	_, err = client.Subscriptions.FindUnique(db.Subscriptions.SubscriptionID.Equals(sid)).Update(
 		db.Subscriptions.Status.Set(db.SubStatusPaid),
 	).Exec(context.Background())
 	if err != nil {

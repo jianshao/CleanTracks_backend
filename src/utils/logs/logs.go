@@ -10,9 +10,9 @@ import (
 var logger = logrus.New()
 
 func InitLog() {
-	path := "~/logs/log"
+	path := "./logs/cleantracks.log"
 	logf, err := rotatelogs.New(
-		path+".%Y%m%d",
+		path+"-%Y%m%d",
 		rotatelogs.WithLinkName(path),
 		rotatelogs.WithRotationTime(24*time.Hour),
 		rotatelogs.WithMaxAge(30*time.Hour*24))
