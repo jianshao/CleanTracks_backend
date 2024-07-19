@@ -3,14 +3,21 @@ module github.com/jianshao/chrome-exts/CleanTracks/backend
 go 1.22.3
 
 require (
+	github.com/NdoleStudio/lemonsqueezy-go v1.2.3
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/joho/godotenv v1.5.1
+	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
+	github.com/sirupsen/logrus v1.9.3
 	github.com/steebchen/prisma-client-go v0.38.0
 	golang.org/x/crypto v0.25.0
 )
 
-require github.com/NdoleStudio/lemonsqueezy-go v1.2.3 // indirect
+require (
+	github.com/jonboulle/clockwork v0.4.0 // indirect
+	github.com/lestrrat-go/strftime v1.0.6 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+)
 
 require (
 	github.com/bytedance/sonic v1.11.6 // indirect

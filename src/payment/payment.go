@@ -3,13 +3,14 @@ package payment
 import (
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 
 	"github.com/NdoleStudio/lemonsqueezy-go"
 	"github.com/gin-gonic/gin"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/prisma/db"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils"
+	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/logs"
+	"github.com/sirupsen/logrus"
 )
 
 var client *lemonsqueezy.Client
@@ -38,7 +39,7 @@ var (
 
 func subCreated(sub *lemonsqueezy.WebhookRequestSubscription) {
 	if reflect.TypeOf(sub.Meta.CustomData["uid"]).Kind() != reflect.Int {
-		log.Fatal("no uid")
+		logs.WriteLog(logrus.ErrorLevel, nil, "no uid")
 	}
 
 	client := utils.GetPrismaClient()
@@ -50,7 +51,7 @@ func subCreated(sub *lemonsqueezy.WebhookRequestSubscription) {
 		db.Subscriptions.SubscriptionID.Set(sub.Data.Attributes.FirstSubscriptionItem.SubscriptionID),
 	).Exec(context.Background())
 	if err != nil {
-		log.Fatal("")
+		logs.WriteLog(logrus.ErrorLevel, nil, err.Error())
 	}
 	return
 }
@@ -89,9 +90,13 @@ func subResumed(sub *lemonsqueezy.WebhookRequestSubscription) {
 
 func subPaid(sub *lemonsqueezy.WebhookRequestSubscriptionInvoice) {
 	client := utils.GetPrismaClient()
-	client.Subscriptions.UpsertOne(
-		db.Subscriptions.SubscriptionID.Equals(sub.Data.Attributes.SubscriptionID),
-	).Update(db.Subscriptions.Status.Set(db.SubStatusPaid)).Exec(context.Background())
+	sid := sub.Data.Attributes.SubscriptionID
+	_, err := client.Subscriptions.FindUnique(db.Subscriptions.SubscriptionID.Equals(sid)).Update(
+		db.Subscriptions.Status.Set(db.SubStatusPaid),
+	).Exec(context.Background())
+	if err != nil {
+		logs.WriteLog(logrus.ErrorLevel, nil, err.Error())
+	}
 }
 
 func WebhookHandler(c *gin.Context) {
@@ -101,6 +106,7 @@ func WebhookHandler(c *gin.Context) {
 
 	// 2. Process the payload if the request is authenticated
 	eventName := c.Request.Header.Get("X-Event-Name")
+	logs.WriteLog(logrus.WarnLevel, nil, fmt.Sprintf("webhook revieve event: %s", eventName))
 
 	switch eventName {
 	case lemonsqueezy.WebhookEventSubscriptionCreated:
@@ -112,17 +118,17 @@ func WebhookHandler(c *gin.Context) {
 	case lemonsqueezy.WebhookEventSubscriptionUnpaused:
 		var request lemonsqueezy.WebhookRequestSubscription
 		if err := c.BindJSON(&request); err != nil {
-			log.Fatal(err)
+			logs.WriteLog(logrus.ErrorLevel, nil, err.Error())
 		}
 		funcMap[eventName](&request)
 		//
 	case lemonsqueezy.WebhookEventSubscriptionPaymentSuccess:
 		var request lemonsqueezy.WebhookRequestSubscriptionInvoice
 		if err := c.BindJSON(&request); err != nil {
-			log.Fatal("")
+			logs.WriteLog(logrus.ErrorLevel, nil, err.Error())
 		}
 		subPaid(&request)
 	default:
-		log.Fatal(fmt.Sprintf("invalid event [%s] received with request", eventName))
+		logs.WriteLog(logrus.ErrorLevel, nil, fmt.Sprintf("invalid event [%s] received with request", eventName))
 	}
 }

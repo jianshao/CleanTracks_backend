@@ -9,6 +9,7 @@ import (
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/payment"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/user"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils"
+	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/logs"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -113,15 +114,17 @@ func checkLogin(c *gin.Context) {
 func main() {
 	router := gin.Default()
 
-	router.POST("api/webhook", payment.WebhookHandler)
-	router.POST("api/register", register)
-	router.POST("api/login", login)
-	protected := router.Group("/")
+	logs.InitLog()
+
+	router.POST("cleantracks/api/webhook", payment.WebhookHandler)
+	router.POST("cleantracks/api/register", register)
+	router.POST("cleantracks/api/login", login)
+	protected := router.Group("cleantracks/api")
 	protected.Use(authenticate)
 	{
-		protected.POST("api/checkLogin", checkLogin)
+		protected.POST("checkLogin", checkLogin)
 		// protected.POST("api/subscribe", subscribe)
 	}
 
-	router.Run(":8000")
+	router.Run(":9999")
 }
