@@ -115,10 +115,11 @@ func main() {
 	router := gin.Default()
 
 	logs.InitLog()
+	utils.Init()
 
 	router.POST("cleantracks/api/webhook", payment.WebhookHandler)
 	router.POST("cleantracks/api/register", register)
-	router.POST("cleantracks/api/login", login)
+	router.POST("/cleantracks/api/login", login)
 	protected := router.Group("cleantracks/api")
 	protected.Use(authenticate)
 	{

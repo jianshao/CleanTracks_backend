@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/prisma/db"
-	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils"
+	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/prisma"
 )
 
 type User struct {
@@ -13,7 +13,7 @@ type User struct {
 }
 
 func CreateUser(email, password string) (*User, error) {
-	client := utils.GetPrismaClient()
+	client := prisma.GetPrismaClient()
 	user, err := client.User.CreateOne(
 		db.User.Email.Set(email),
 		db.User.Password.Set(password),
@@ -28,7 +28,7 @@ func CreateUser(email, password string) (*User, error) {
 }
 
 func FindUser(email string) (*User, error) {
-	client := utils.GetPrismaClient()
+	client := prisma.GetPrismaClient()
 	user, err := client.User.FindUnique(
 		db.User.Email.Equals(email),
 	).Exec(context.Background())

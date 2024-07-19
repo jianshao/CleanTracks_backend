@@ -8,8 +8,8 @@ import (
 	"github.com/NdoleStudio/lemonsqueezy-go"
 	"github.com/gin-gonic/gin"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/prisma/db"
-	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/logs"
+	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/prisma"
 	"github.com/sirupsen/logrus"
 )
 
@@ -39,12 +39,13 @@ var (
 
 func subCreated(sub *lemonsqueezy.WebhookRequestSubscription) {
 	uid := 0
-	if reflect.TypeOf(sub.Meta.CustomData["uid"]).Kind() == reflect.Int {
-		// logs.WriteLog(logrus.ErrorLevel, nil, "no uid")
-		uid = sub.Meta.CustomData["uid"].(int)
+	if custom_uid, ok := sub.Meta.CustomData["uid"]; ok {
+		if reflect.TypeOf(custom_uid).Kind() == reflect.Int {
+			uid = custom_uid.(int)
+		}
 	}
 
-	client := utils.GetPrismaClient()
+	client := prisma.GetPrismaClient()
 	_, err := client.Subscriptions.CreateOne(
 		db.Subscriptions.UID.Set(uid),
 		db.Subscriptions.StoreID.Set(sub.Data.Attributes.StoreID),
@@ -53,7 +54,9 @@ func subCreated(sub *lemonsqueezy.WebhookRequestSubscription) {
 		db.Subscriptions.SubscriptionID.Set(sub.Data.Attributes.FirstSubscriptionItem.SubscriptionID),
 	).Exec(context.Background())
 	if err != nil {
-		logs.WriteLog(logrus.ErrorLevel, nil, err.Error())
+		logs.WriteLog(logrus.ErrorLevel, nil, fmt.Sprintf("create sub failed %s", err.Error()))
+	} else {
+		logs.WriteLog(logrus.WarnLevel, nil, fmt.Sprintf("create sub success"))
 	}
 	return
 }
@@ -62,21 +65,21 @@ func subUpdated(sub *lemonsqueezy.WebhookRequestSubscription) {
 }
 
 func subPaused(sub *lemonsqueezy.WebhookRequestSubscription) {
-	client := utils.GetPrismaClient()
+	client := prisma.GetPrismaClient()
 	client.Subscriptions.UpsertOne(
 		db.Subscriptions.SubscriptionID.Equals(sub.Data.Attributes.FirstSubscriptionItem.SubscriptionID),
 	).Update(db.Subscriptions.Status.Set(db.SubStatusPaused)).Exec(context.Background())
 }
 
 func subUnPaused(sub *lemonsqueezy.WebhookRequestSubscription) {
-	client := utils.GetPrismaClient()
+	client := prisma.GetPrismaClient()
 	client.Subscriptions.UpsertOne(
 		db.Subscriptions.SubscriptionID.Equals(sub.Data.Attributes.FirstSubscriptionItem.SubscriptionID),
 	).Update(db.Subscriptions.Status.Set(db.SubStatusPaid)).Exec(context.Background())
 }
 
 func subExpired(sub *lemonsqueezy.WebhookRequestSubscription) {
-	client := utils.GetPrismaClient()
+	client := prisma.GetPrismaClient()
 	client.Subscriptions.UpsertOne(
 		db.Subscriptions.SubscriptionID.Equals(sub.Data.Attributes.FirstSubscriptionItem.SubscriptionID),
 	).Update(db.Subscriptions.Status.Set(db.SubStatusExpired)).Exec(context.Background())
@@ -91,7 +94,7 @@ func subResumed(sub *lemonsqueezy.WebhookRequestSubscription) {
 }
 
 func subPaid(sub *lemonsqueezy.WebhookRequestSubscriptionInvoice) {
-	client := utils.GetPrismaClient()
+	client := prisma.GetPrismaClient()
 	sid := sub.Data.Attributes.SubscriptionID
 	_, err := client.Subscriptions.FindUnique(db.Subscriptions.SubscriptionID.Equals(sid)).Exec(context.Background())
 	if err != nil {
@@ -118,11 +121,17 @@ func WebhookHandler(c *gin.Context) {
 
 	switch eventName {
 	case lemonsqueezy.WebhookEventSubscriptionCreated:
+		fallthrough
 	case lemonsqueezy.WebhookEventSubscriptionUpdated:
+		fallthrough
 	case lemonsqueezy.WebhookEventSubscriptionCancelled:
+		fallthrough
 	case lemonsqueezy.WebhookEventSubscriptionResumed:
+		fallthrough
 	case lemonsqueezy.WebhookEventSubscriptionExpired:
+		fallthrough
 	case lemonsqueezy.WebhookEventSubscriptionPaused:
+		fallthrough
 	case lemonsqueezy.WebhookEventSubscriptionUnpaused:
 		var request lemonsqueezy.WebhookRequestSubscription
 		if err := c.BindJSON(&request); err != nil {
