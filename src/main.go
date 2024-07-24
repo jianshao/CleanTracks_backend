@@ -7,9 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/payment"
+	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/subscriptions"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/user"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils"
-	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/logs"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -48,7 +49,27 @@ func register(c *gin.Context) {
 }
 
 type LoginResp struct {
-	Token string `json:"token"`
+	Token        string `json:"token"`
+	Uid          int    `json:"uid"`
+	Subscription int    `json:"subscription"`
+}
+
+func generateToken(email string) (string, error) {
+
+	expirationTime := time.Now().Add(30 * 24 * time.Hour)
+	claims := &Claims{
+		Email: email,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: expirationTime.Unix(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtKey)
+	if err != nil {
+		return "", nil
+	}
+	return tokenString, nil
 }
 
 func login(c *gin.Context) {
@@ -64,24 +85,19 @@ func login(c *gin.Context) {
 		return
 	}
 
-	expirationTime := time.Now().Add(30 * 24 * time.Hour)
-	claims := &Claims{
-		Email: creds.Email,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expirationTime.Unix(),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := generateToken(creds.Email)
 	if err != nil {
 		c.JSON(http.StatusOK, utils.BuildApiResponse(2, "Error generating token", nil))
 		return
 	}
 
-	c.SetCookie("token", tokenString, 2592000, "/", "localhost", false, true)
+	resp := LoginResp{Token: tokenString, Uid: existedUser.Id}
+	sub, err := subscriptions.GetCurrSubscribe(existedUser.Id)
+	if err == nil {
+		resp.Subscription = sub.SubType
+	}
 
-	c.JSON(http.StatusOK, utils.BuildApiResponse(0, "", LoginResp{Token: tokenString}))
+	c.JSON(http.StatusOK, utils.BuildApiResponse(0, "", resp))
 }
 
 func authenticate(c *gin.Context) {
@@ -108,19 +124,50 @@ func authenticate(c *gin.Context) {
 }
 
 func checkLogin(c *gin.Context) {
-	c.JSON(http.StatusOK, utils.BuildApiResponse(0, "", nil))
+	email := c.GetString("email")
+	existedUser, err := user.FindUser(email)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.BuildApiResponse(1, "user not existed", nil))
+		return
+	}
+
+	resp := LoginResp{
+		Uid:   existedUser.Id,
+		Token: c.GetHeader("token"),
+	}
+	sub, err := subscriptions.GetCurrSubscribe(existedUser.Id)
+	if err == nil {
+		resp.Subscription = sub.SubType
+	}
+	c.JSON(http.StatusOK, utils.BuildApiResponse(0, "", resp))
 }
 
 func main() {
 	router := gin.Default()
 
-	logs.InitLog()
-	utils.Init()
+	router.Use(func(c *gin.Context) {
+		// 设置 CORS 响应头
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, token")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 
-	router.POST("cleantracks/api/webhook", payment.WebhookHandler)
-	router.POST("cleantracks/api/register", register)
+		if c.Request.Method == "OPTIONS" {
+			// 处理预检请求
+			c.AbortWithStatusJSON(http.StatusOK, gin.H{})
+			return
+		}
+
+		c.Next()
+	})
+
+	path := "./logs/cleantracks.log"
+	utils.Init(path, logrus.DebugLevel)
+
+	router.POST("/cleantracks/api/webhook", payment.WebhookHandler)
+	router.POST("/cleantracks/api/register", register)
 	router.POST("/cleantracks/api/login", login)
-	protected := router.Group("cleantracks/api")
+	protected := router.Group("/cleantracks/api")
 	protected.Use(authenticate)
 	{
 		protected.POST("checkLogin", checkLogin)

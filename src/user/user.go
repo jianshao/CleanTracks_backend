@@ -2,14 +2,17 @@ package user
 
 import (
 	"context"
+	"time"
 
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/prisma/db"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/prisma"
 )
 
 type User struct {
-	Email    string
-	Password string
+	Id           int
+	Email        string
+	Password     string
+	RegisterTime time.Time
 }
 
 func CreateUser(email, password string) (*User, error) {
@@ -22,8 +25,10 @@ func CreateUser(email, password string) (*User, error) {
 		return nil, err
 	}
 	return &User{
-		Email:    user.Email,
-		Password: user.Password,
+		Id:           user.ID,
+		Email:        user.Email,
+		Password:     user.Password,
+		RegisterTime: user.RegisterTime,
 	}, nil
 }
 
@@ -36,7 +41,23 @@ func FindUser(email string) (*User, error) {
 		return nil, err
 	}
 	return &User{
-		Email:    user.Email,
-		Password: user.Password,
+		Id:           user.ID,
+		Email:        user.Email,
+		Password:     user.Password,
+		RegisterTime: user.RegisterTime,
 	}, nil
+}
+
+func GetUserById(uid int) (*User, error) {
+	client := prisma.GetPrismaClient()
+	user, err := client.User.FindUnique(db.User.ID.Equals(uid)).Exec(context.Background())
+	if err == nil {
+		return &User{
+			Id:           user.ID,
+			Email:        user.Email,
+			Password:     user.Password,
+			RegisterTime: user.RegisterTime,
+		}, nil
+	}
+	return nil, err
 }

@@ -3,6 +3,7 @@ package utils
 import (
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/logs"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/prisma"
+	"github.com/sirupsen/logrus"
 )
 
 type ApiResponse struct {
@@ -19,7 +20,7 @@ func BuildApiResponse(code int, message string, data any) ApiResponse {
 	}
 }
 
-func Init() {
+func Init(path string, level logrus.Level) {
 	prisma.Init()
-	logs.InitLog()
+	logs.InitLog(path, level)
 }

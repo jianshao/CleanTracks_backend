@@ -9,8 +9,7 @@ import (
 
 var logger = logrus.New()
 
-func InitLog() {
-	path := "./logs/cleantracks.log"
+func InitLog(path string, level logrus.Level) {
 	logf, err := rotatelogs.New(
 		path+"-%Y%m%d",
 		rotatelogs.WithLinkName(path),
@@ -23,7 +22,7 @@ func InitLog() {
 
 	logger.Out = logf
 	logger.SetFormatter(&logrus.JSONFormatter{})
-	logger.SetLevel(logrus.DebugLevel)
+	logger.SetLevel(level)
 }
 
 func WriteLog(level logrus.Level, fields map[string]any, message string) {
