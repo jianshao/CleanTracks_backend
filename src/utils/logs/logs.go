@@ -9,7 +9,7 @@ import (
 
 var logger = logrus.New()
 
-func InitLog(path string, level logrus.Level) {
+func InitLog(path string, level logrus.Level) bool {
 	logf, err := rotatelogs.New(
 		path+"-%Y%m%d",
 		rotatelogs.WithLinkName(path),
@@ -17,12 +17,13 @@ func InitLog(path string, level logrus.Level) {
 		rotatelogs.WithMaxAge(30*time.Hour*24))
 	if err != nil {
 		logrus.Fatal(err.Error())
-		return
+		return false
 	}
 
 	logger.Out = logf
 	logger.SetFormatter(&logrus.JSONFormatter{})
 	logger.SetLevel(level)
+	return true
 }
 
 func WriteLog(level logrus.Level, fields map[string]any, message string) {

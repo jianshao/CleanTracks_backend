@@ -10,6 +10,7 @@ import (
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/subscriptions"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/user"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils"
+	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/logs"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -80,7 +81,15 @@ func login(c *gin.Context) {
 	}
 
 	existedUser, err := user.FindUser(creds.Email)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(existedUser.Password), []byte(creds.Password)) != nil {
+	if err != nil {
+		logs.WriteLog(logrus.ErrorLevel, nil, "find user: "+err.Error())
+		c.JSON(http.StatusOK, utils.BuildApiResponse(2, "Invalid email or password", nil))
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(existedUser.Password), []byte(creds.Password))
+	if err != nil {
+		logs.WriteLog(logrus.ErrorLevel, nil, "CompareHashAndPassword: "+err.Error())
 		c.JSON(http.StatusOK, utils.BuildApiResponse(2, "Invalid email or password", nil))
 		return
 	}
@@ -162,7 +171,10 @@ func main() {
 	})
 
 	path := "./logs/cleantracks.log"
-	utils.Init(path, logrus.DebugLevel)
+	if !utils.Init(path, logrus.DebugLevel) {
+
+		return
+	}
 
 	router.POST("/cleantracks/api/webhook", payment.WebhookHandler)
 	router.POST("/cleantracks/api/register", register)
@@ -171,7 +183,6 @@ func main() {
 	protected.Use(authenticate)
 	{
 		protected.POST("checkLogin", checkLogin)
-		// protected.POST("api/subscribe", subscribe)
 	}
 
 	router.Run(":9999")

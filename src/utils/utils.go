@@ -20,7 +20,7 @@ func BuildApiResponse(code int, message string, data any) ApiResponse {
 	}
 }
 
-func Init(path string, level logrus.Level) {
+func Init(path string, level logrus.Level) bool {
 	prisma.Init()
-	logs.InitLog(path, level)
+	return logs.InitLog(path, level)
 }
