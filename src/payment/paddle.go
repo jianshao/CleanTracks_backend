@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -151,21 +150,19 @@ type PaddleEvent struct {
 	Data           PaddleEventData `json:"data"`
 }
 
+type CustomerRespData struct {
+	Id    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type CustomerResp struct {
+	Data CustomerRespData `json:"data"`
+}
+
 type ProcFunc func() error
 
 var (
-	gEventType = map[string]ProcFunc{
-		// activated是试用期结束，trialing是试用期开始
-		// "subscription.activated": gPaddle.Create,
-		"subscription.canceled": gPaddle.Cancel,
-		"subscription.created":  gPaddle.Create,
-		// "subscription.imported":  true,
-		"subscription.past_due": gPaddle.Expired,
-		"subscription.paused":   gPaddle.Pause,
-		"subscription.resumed":  gPaddle.Resume,
-		// "subscription.trialing":  gPaddle.Create,
-		"subscription.updated": gPaddle.Update,
-	}
 	gEventStatus = map[string]bool{
 		"active":   true,
 		"canceled": true,
@@ -228,6 +225,24 @@ var (
 		"training-services":             true,
 		"website-hosting":               true,
 	}
+	gSubTypeMap = map[string]int{
+		"pri_01j4nt2jb3brrha2pxa8ma9c8f": 1,
+		"pri_01j4nt5zw06qtpctxtk0vjp6xk": 2,
+		"pri_01j4r9hzer7j9bws375kj1557w": 2,
+		"pri_01j4r9h4em2ak1tkv789evmcbb": 1,
+	}
+	gEventType = map[string]ProcFunc{
+		// activated是试用期结束，trialing是试用期开始
+		"subscription.created": gPaddle.Create,
+		// "subscription.trialing":  gPaddle.Create,
+		"subscription.activated": gPaddle.Active,
+		"subscription.canceled":  gPaddle.Cancel,
+		// "subscription.imported":  true,
+		"subscription.past_due": gPaddle.Expired,
+		"subscription.paused":   gPaddle.Pause,
+		"subscription.resumed":  gPaddle.Resume,
+		"subscription.updated":  gPaddle.Update,
+	}
 )
 
 var (
@@ -239,26 +254,12 @@ type Paddle struct {
 	uid    int
 }
 
-func (p *Paddle) GetPaymentURL(paymentID string) string {
-	return "https://checkout.paddle.com/checkout/oneoff/package/" + paymentID
-}
-
 func checkData(event *PaddleEvent) error {
 	return nil
 }
 
 func paddleCheckAuth(event *PaddleEvent) error {
 	return nil
-}
-
-type CustomerRespData struct {
-	Id    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
-
-type CustomerResp struct {
-	Data CustomerRespData `json:"data"`
 }
 
 func getCustomerEmail(customerId string) (string, error) {
@@ -304,8 +305,6 @@ func paddleFindUser(event *PaddleEvent) (int, error) {
 }
 
 func (p *Paddle) Prepare(data any) error {
-
-	log.Println("prepare in....")
 	event, ok := data.(*PaddleEvent)
 	if !ok {
 		return errors.New("prepare: invalid struct type")
@@ -326,7 +325,6 @@ func (p *Paddle) Prepare(data any) error {
 
 	p.uid = uid
 	p.paddle = event
-	log.Println("prepare out....")
 	return nil
 }
 
@@ -336,7 +334,7 @@ type PaddleSubDetail struct {
 	Quantity  int    `json:"quantity"`
 }
 
-func buildPaddleSubDetail(item PaddleEventDataItem) ([]byte, error) {
+func buildPaddleSubDetail(item *PaddleEventDataItem) ([]byte, error) {
 	detail := PaddleSubDetail{
 		PriceId:   item.Price.Id,
 		ProductId: item.Price.ProductId,
@@ -345,63 +343,73 @@ func buildPaddleSubDetail(item PaddleEventDataItem) ([]byte, error) {
 	return json.Marshal(detail)
 }
 
-var (
-	gSubTypeMap = map[string]int{
-		"pri_01j4nt2jb3brrha2pxa8ma9c8f": 1,
-		"pri_01j4nt5zw06qtpctxtk0vjp6xk": 2,
-		"pri_01j4r9hzer7j9bws375kj1557w": 2,
-		"pri_01j4r9h4em2ak1tkv789evmcbb": 1,
+func save2DB(uid int, item *PaddleEventDataItem, paddle *PaddleEvent) error {
+	details, err := buildPaddleSubDetail(item)
+	if err != nil {
+		return err
 	}
-)
 
+	// 保存订阅历史记录
+	err = subscriptions.SaveRecord(uid, "paddle", paddle.EventType, string(details), paddle.OccurredAt)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// 订阅创建时会先经历试用期（不论是否设置了试用期）,当active时才是正式订阅（已付款）
 func (p *Paddle) Create() error {
 	for _, item := range p.paddle.Data.Items {
-		details, err := buildPaddleSubDetail(item)
-		if err != nil {
-			return err
+		if err := save2DB(p.uid, &item, p.paddle); err != nil {
+			return fmt.Errorf("Save to db failed: %s", err.Error())
 		}
 
-		// 保存订阅历史记录
-		err = subscriptions.SaveRecord(p.uid, "paddle", p.paddle.EventType, string(details), p.paddle.OccurredAt)
-		if err != nil {
-			return err
+		// if status, ok := gSubTypeMap[item.Price.Id]; ok {
+		// 	// 更新用户当前订阅类型
+		// 	if err := user.Subscribe(p.uid, status); err != nil {
+		// 		return err
+		// 	}
+		// } else {
+		// 	return errors.New(fmt.Sprintf("invalid price id: %s", item.Price.Id))
+		// }
+	}
+
+	return nil
+}
+
+func (p *Paddle) Active() error {
+	for _, item := range p.paddle.Data.Items {
+		if err := save2DB(p.uid, &item, p.paddle); err != nil {
+			return fmt.Errorf("Save to db failed: %s", err.Error())
 		}
 
-		status, ok := gSubTypeMap[item.Price.Id]
-		if !ok {
+		if status, ok := gSubTypeMap[item.Price.Id]; ok {
+			// 更新用户当前订阅类型
+			if err := user.Subscribe(p.uid, status); err != nil {
+				return err
+			}
+		} else {
 			return errors.New(fmt.Sprintf("invalid price id: %s", item.Price.Id))
-		}
-		// 更新用户当前订阅类型
-		err = user.Subscribe(p.uid, status)
-		if err != nil {
-			return err
 		}
 	}
 
 	return nil
 }
 
+// 更新订阅，订阅升级或降级
 func (p *Paddle) Update() error {
 	for _, item := range p.paddle.Data.Items {
-		details, err := buildPaddleSubDetail(item)
-		if err != nil {
-			return err
+		if err := save2DB(p.uid, &item, p.paddle); err != nil {
+			return fmt.Errorf("Save to db failed: %s", err.Error())
 		}
 
-		// 保存订阅历史记录
-		err = subscriptions.SaveRecord(p.uid, "paddle", p.paddle.EventType, string(details), p.paddle.OccurredAt)
-		if err != nil {
-			return err
-		}
-
-		status, ok := gSubTypeMap[item.Price.Id]
-		if !ok {
-			return errors.New(fmt.Sprintf("invalid price id: %s", item.Price.Id))
-		}
 		// 更新用户当前订阅类型
-		err = user.Subscribe(p.uid, status)
-		if err != nil {
-			return err
+		if status, ok := gSubTypeMap[item.Price.Id]; ok {
+			if err := user.Subscribe(p.uid, status); err != nil {
+				return err
+			}
+		} else {
+			return errors.New(fmt.Sprintf("invalid price id: %s", item.Price.Id))
 		}
 	}
 	return nil
@@ -409,20 +417,12 @@ func (p *Paddle) Update() error {
 
 func (p *Paddle) Cancel() error {
 	for _, item := range p.paddle.Data.Items {
-		details, err := buildPaddleSubDetail(item)
-		if err != nil {
-			return err
-		}
-
-		// 保存订阅历史记录
-		err = subscriptions.SaveRecord(p.uid, "paddle", p.paddle.EventType, string(details), p.paddle.OccurredAt)
-		if err != nil {
-			return err
+		if err := save2DB(p.uid, &item, p.paddle); err != nil {
+			return fmt.Errorf("Save to db failed: %s", err.Error())
 		}
 
 		// 更新用户当前订阅类型
-		err = user.Subscribe(p.uid, 0)
-		if err != nil {
+		if err := user.Subscribe(p.uid, 0); err != nil {
 			return err
 		}
 	}
@@ -431,20 +431,12 @@ func (p *Paddle) Cancel() error {
 
 func (p *Paddle) Pause() error {
 	for _, item := range p.paddle.Data.Items {
-		details, err := buildPaddleSubDetail(item)
-		if err != nil {
-			return err
-		}
-
-		// 保存订阅历史记录
-		err = subscriptions.SaveRecord(p.uid, "paddle", p.paddle.EventType, string(details), p.paddle.OccurredAt)
-		if err != nil {
-			return err
+		if err := save2DB(p.uid, &item, p.paddle); err != nil {
+			return fmt.Errorf("Save to db failed: %s", err.Error())
 		}
 
 		// 更新用户当前订阅类型
-		err = user.Subscribe(p.uid, 0)
-		if err != nil {
+		if err := user.Subscribe(p.uid, 0); err != nil {
 			return err
 		}
 	}
@@ -453,25 +445,17 @@ func (p *Paddle) Pause() error {
 
 func (p *Paddle) Resume() error {
 	for _, item := range p.paddle.Data.Items {
-		details, err := buildPaddleSubDetail(item)
-		if err != nil {
-			return err
+		if err := save2DB(p.uid, &item, p.paddle); err != nil {
+			return fmt.Errorf("Save to db failed: %s", err.Error())
 		}
 
-		// 保存订阅历史记录
-		err = subscriptions.SaveRecord(p.uid, "paddle", p.paddle.EventType, string(details), p.paddle.OccurredAt)
-		if err != nil {
-			return err
-		}
-
-		status, ok := gSubTypeMap[item.Price.Id]
-		if !ok {
-			return errors.New(fmt.Sprintf("invalid price id: %s", item.Price.Id))
-		}
 		// 更新用户当前订阅类型
-		err = user.Subscribe(p.uid, status)
-		if err != nil {
-			return err
+		if status, ok := gSubTypeMap[item.Price.Id]; ok {
+			if err := user.Subscribe(p.uid, status); err != nil {
+				return err
+			}
+		} else {
+			return errors.New(fmt.Sprintf("invalid price id: %s", item.Price.Id))
 		}
 	}
 	return nil
@@ -479,20 +463,12 @@ func (p *Paddle) Resume() error {
 
 func (p *Paddle) Expired() error {
 	for _, item := range p.paddle.Data.Items {
-		details, err := buildPaddleSubDetail(item)
-		if err != nil {
-			return err
-		}
-
-		// 保存订阅历史记录
-		err = subscriptions.SaveRecord(p.uid, "paddle", p.paddle.EventType, string(details), p.paddle.OccurredAt)
-		if err != nil {
-			return err
+		if err := save2DB(p.uid, &item, p.paddle); err != nil {
+			return fmt.Errorf("Save to db failed: %s", err.Error())
 		}
 
 		// 更新用户当前订阅类型
-		err = user.Subscribe(p.uid, 0)
-		if err != nil {
+		if err := user.Subscribe(p.uid, 0); err != nil {
 			return err
 		}
 	}
