@@ -251,13 +251,50 @@ func paddleCheckAuth(event *PaddleEvent) error {
 	return nil
 }
 
-func paddleFindUser(event *PaddleEvent) (int, error) {
-	if event.Data.CustomData == nil {
-		return 0, errors.New("invalid custom data")
+type CustomerRespData struct {
+	Id    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type CustomerResp struct {
+	Data CustomerRespData `json:"data"`
+}
+
+func getCustomerEmail(customerId string) (string, error) {
+	url := "https://sandbox-api.paddle.com/customers/" + customerId
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("Failed to create request: %s", err.Error())
 	}
-	email, ok := (*event.Data.CustomData)["email"]
-	if !ok {
-		return 0, errors.New("")
+	// 设置请求头
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer ")
+	client := &http.Client{}
+	resp, err := client.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("get customer info from api failed: %s", err.Error())
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("Failed to read response body: %v", err.Error())
+	}
+
+	// 解析 JSON 响应
+	var custom CustomerResp
+	if err := json.Unmarshal(body, &custom); err != nil {
+		return "", fmt.Errorf("Failed to unmarshal JSON: %v", err.Error())
+	}
+
+	return custom.Data.Email, nil
+}
+
+func paddleFindUser(event *PaddleEvent) (int, error) {
+	email, err := getCustomerEmail(event.Data.CustomerId)
+	if err != nil {
+		return 0, err
 	}
 	userInfo, err := user.FindUser(email)
 	if err != nil {
