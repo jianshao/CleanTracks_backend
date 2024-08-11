@@ -177,7 +177,7 @@ func main() {
 		return
 	}
 
-	router.POST("/cleantracks/api/webhook", payment.WebhookHandler)
+	router.POST("/cleantracks/api/webhook", payment.PaddleWebHookHandle)
 	router.POST("/cleantracks/api/register", register)
 	router.POST("/cleantracks/api/login", login)
 	protected := router.Group("/cleantracks/api")
