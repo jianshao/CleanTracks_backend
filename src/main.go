@@ -183,7 +183,7 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 
 	// 监听指定的信号: SIGINT (Ctrl+C) 和 SIGTERM
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 
 	// 启动一个 goroutine 监听信号
 	go func() {
