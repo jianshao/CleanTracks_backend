@@ -1,7 +1,12 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -171,9 +176,25 @@ func main() {
 		c.Next()
 	})
 
+	// 创建一个带有取消功能的上下文
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// 创建一个通道，用于接收系统信号
+	sigs := make(chan os.Signal, 1)
+
+	// 监听指定的信号: SIGINT (Ctrl+C) 和 SIGTERM
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	// 启动一个 goroutine 监听信号
+	go func() {
+		sig := <-sigs
+		fmt.Println()
+		fmt.Printf("Received signal: %s\n", sig)
+		cancel() // 取消上下文，通知主程序退出
+	}()
+
 	path := "./logs/cleantracks.log"
 	if !utils.Init(path, logrus.DebugLevel) {
-
 		return
 	}
 
@@ -187,4 +208,12 @@ func main() {
 	}
 
 	router.Run(":9999")
+
+	select {
+	case <-ctx.Done():
+		fmt.Println("Shutting down gracefully...")
+	}
+
+	// 进行清理操作
+	utils.Close()
 }

@@ -24,3 +24,7 @@ func Init(path string, level logrus.Level) bool {
 	prisma.Init()
 	return logs.InitLog(path, level)
 }
+
+func Close() {
+	prisma.Close()
+}

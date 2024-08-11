@@ -23,3 +23,10 @@ func Init() {
 func GetPrismaClient() *db.PrismaClient {
 	return gPrisma
 }
+
+func Close() {
+	if gPrisma != nil {
+		gPrisma.Disconnect()
+		gPrisma = nil
+	}
+}
