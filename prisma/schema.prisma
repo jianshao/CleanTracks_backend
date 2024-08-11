@@ -29,17 +29,17 @@ model user {
   avatar String @default("")
   email String @unique
   password String
+  status Int @default(0)
   register_time DateTime @default(dbgenerated("now()"))
 }
+
 
 model subscriptions {
   id    Int     @id @default(autoincrement())
   uid Int
-  store_id Int
-  product_id Int
-  variant_id Int
-  subscription_id Int @unique
-  status SUB_STATUS @default(INIT)
+  platform String
+  action String
+  details String
+  occurred_time DateTime
   created_time DateTime @default(dbgenerated("now()"))
-  updated_time DateTime @updatedAt
 }

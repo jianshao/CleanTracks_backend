@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/prisma/db"
-	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/user"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/prisma"
 )
 
@@ -18,35 +17,35 @@ type Subscription struct {
 	SubType int
 }
 
-func GetCurrSubscribe(uid int) (*Subscription, error) {
+type SubInfo struct {
+	Uid           int
+	Platform      string
+	Action        string
+	Occurred_time time.Time
+	Detail        string
+}
+
+func BuildSubInfo(uid int, platform, action, detail string, occurredAt time.Time) *SubInfo {
+	return &SubInfo{
+		Uid:           uid,
+		Platform:      platform,
+		Action:        action,
+		Detail:        detail,
+		Occurred_time: occurredAt,
+	}
+}
+
+func SaveRecord(uid int, platform, action, detail string, occurredAt time.Time) error {
 	client := prisma.GetPrismaClient()
-	user, err := user.GetUserById(uid)
-	if err != nil {
-		return nil, err
-	}
-
-	subscribe := &Subscription{
-		Uid:     user.Id,
-		SubType: 0,
-	}
-	// 用户注册后7天内是试用期
-	if !time.Now().After(user.RegisterTime.AddDate(0, 0, 7)) {
-		subscribe.SubType = 1
-	}
-
-	// 如果在7天内有订阅，则用订阅的信息
-	sub, err := client.Subscriptions.FindFirst(
-		db.Subscriptions.UID.Equals(uid),
-		db.Subscriptions.Status.Equals(db.SubStatusPaid),
+	_, err := client.Subscriptions.CreateOne(
+		db.Subscriptions.UID.Set(uid),
+		db.Subscriptions.Platform.Set(platform),
+		db.Subscriptions.Action.Set(action),
+		db.Subscriptions.Details.Set(detail),
+		db.Subscriptions.OccurredTime.Set(occurredAt),
 	).Exec(context.Background())
-	if err == db.ErrNotFound {
-		return subscribe, nil
-	} else if err != nil {
-		return nil, err
-	} else {
-		if data, ok := SubMap[sub.VariantID]; ok {
-			subscribe.SubType = data
-		}
+	if err != nil {
+		return err
 	}
-	return subscribe, nil
+	return nil
 }

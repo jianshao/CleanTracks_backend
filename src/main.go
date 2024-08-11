@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/payment"
-	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/subscriptions"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/user"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/logs"
@@ -53,6 +52,7 @@ type LoginResp struct {
 	Token        string `json:"token"`
 	Uid          int    `json:"uid"`
 	Subscription int    `json:"subscription"`
+	Email        string `json:"email"`
 }
 
 func generateToken(email string) (string, error) {
@@ -100,10 +100,10 @@ func login(c *gin.Context) {
 		return
 	}
 
-	resp := LoginResp{Token: tokenString, Uid: existedUser.Id}
-	sub, err := subscriptions.GetCurrSubscribe(existedUser.Id)
+	resp := LoginResp{Token: tokenString, Uid: existedUser.Id, Email: existedUser.Email}
+	sub, err := user.GetCurrSubscribe(existedUser.Id)
 	if err == nil {
-		resp.Subscription = sub.SubType
+		resp.Subscription = sub
 	}
 
 	c.JSON(http.StatusOK, utils.BuildApiResponse(0, "", resp))
@@ -143,10 +143,11 @@ func checkLogin(c *gin.Context) {
 	resp := LoginResp{
 		Uid:   existedUser.Id,
 		Token: c.GetHeader("token"),
+		Email: existedUser.Email,
 	}
-	sub, err := subscriptions.GetCurrSubscribe(existedUser.Id)
+	sub, err := user.GetCurrSubscribe(existedUser.Id)
 	if err == nil {
-		resp.Subscription = sub.SubType
+		resp.Subscription = sub
 	}
 	c.JSON(http.StatusOK, utils.BuildApiResponse(0, "", resp))
 }
