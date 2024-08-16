@@ -176,23 +176,6 @@ func main() {
 		c.Next()
 	})
 
-	// 创建一个带有取消功能的上下文
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// 创建一个通道，用于接收系统信号
-	sigs := make(chan os.Signal, 1)
-
-	// 监听指定的信号: SIGINT (Ctrl+C) 和 SIGTERM
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
-
-	// 启动一个 goroutine 监听信号
-	go func() {
-		sig := <-sigs
-		fmt.Println()
-		fmt.Printf("Received signal: %s\n", sig)
-		cancel() // 取消上下文，通知主程序退出
-	}()
-
 	path := "./logs/cleantracks.log"
 	if !utils.Init(path, logrus.DebugLevel) {
 		return
@@ -207,13 +190,42 @@ func main() {
 		protected.POST("checkLogin", checkLogin)
 	}
 
-	router.Run(":9999")
+	srv := &http.Server{
+		Addr:    ":9998",
+		Handler: router,
+	}
+	go func() {
+		// service connections
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logs.WriteLog(logrus.FatalLevel, nil, fmt.Sprintf("listen: %s\n", err))
+		}
+	}()
+
+	// 创建一个通道，用于接收系统信号
+	sigs := make(chan os.Signal, 1)
+
+	// 监听指定的信号: SIGINT (Ctrl+C) 和 SIGTERM
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGQUIT)
+
+	// 启动一个 goroutine 监听信号
+	sig := <-sigs
+	fmt.Printf("Received signal: %s\n", sig)
+
+	// 创建一个带有取消功能的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 退出web server，退出的时候会向ctx写入数据
+	if err := srv.Shutdown(ctx); err != nil {
+		logs.WriteLog(logrus.FatalLevel, nil, fmt.Sprintf("Server Shutdown: %s", err.Error()))
+	}
+
+	// 进行清理操作
+	utils.Close()
 
 	select {
 	case <-ctx.Done():
 		fmt.Println("Shutting down gracefully...")
 	}
 
-	// 进行清理操作
-	utils.Close()
 }
