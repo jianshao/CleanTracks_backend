@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/config"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/subscriptions"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/user"
 	"github.com/jianshao/chrome-exts/CleanTracks/backend/src/utils/logs"
@@ -263,14 +264,14 @@ func paddleCheckAuth(event *PaddleEvent) error {
 }
 
 func getCustomerEmail(customerId string) (string, error) {
-	url := "https://sandbox-api.paddle.com/customers/" + customerId
+	url := "https://api.paddle.com/customers/" + customerId
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("Failed to create request: %s", err.Error())
 	}
 	// 设置请求头
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer ")
+	request.Header.Set("Authorization", "Bearer "+config.APP_SECRET)
 	client := &http.Client{}
 	resp, err := client.Do(request)
 	if err != nil {
